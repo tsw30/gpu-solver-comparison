@@ -1,0 +1,14 @@
+# OS and editor artefacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Generated output files
+*.log
+*.out
+results/*
