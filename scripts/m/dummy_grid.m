@@ -1,8 +1,16 @@
-function g = dummy_grid(plot_blocks)
+function g = dummy_grid(plot_blocks, NI, NJ, NK)
 % DUMMY_GRID Creates a dummy grid structure for testing purposes.
+% Optional NI, NJ, NK (odd integers, default 11) scale the grid, e.g. to
+% time ts3_extract on realistic block sizes.
 
 if ~exist('plot_blocks', 'var')
     plot_blocks = false;
+end
+if ~exist('NI', 'var') || isempty(NI), NI = 11; end
+if ~exist('NJ', 'var') || isempty(NJ), NJ = 11; end
+if ~exist('NK', 'var') || isempty(NK), NK = 11; end
+if mod(NI,2)~=1 || mod(NJ,2)~=1 || mod(NK,2)~=1
+    error('dummy_grid: NI, NJ and NK must be odd');
 end
 
 % load measurement plane coordinates
@@ -15,7 +23,6 @@ end
 % coords data storing (x,r) arrays for 'L00S', 'BPIN', 'ESIN' measurement planes
 measurement_coords = jsondecode(fileread(coords_file));
 
-NI = 11; NJ = 11; NK = 11;
 NBLADE = 20;
 PERIOD = 2*pi/NBLADE;
 R1 = 1; R2 = 1.5;

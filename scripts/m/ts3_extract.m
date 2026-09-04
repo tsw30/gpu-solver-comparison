@@ -341,11 +341,14 @@ for bid = bids
         continue                     % cut plane misses this block
     end
     [yy,zz] = pol2cart(rrt./rr,rr);
-    % Use the ref convention: isosurface(y,z,var, xrot, 0, var)
-    %   X=y, Y=z, Z=var (3D grid), V=xrot (iso-field), isovalue=0, data=var
-    % This returns vertices in (y,z,var_interp) space with faces from the
-    % xrot=0 isosurface.  We extract faces + (y,z) positions from the
-    % first variable, then sample the rest via scatteredInterpolant.
+    % ref convention: isosurface(y,z,var, xrot, 0, var) - X=y, Y=z, Z=var
+    % (3D grid), V=xrot (iso-field), isovalue=0, data=var.  The faces and
+    % the (y,z) vertex positions depend only on xrot (marching cubes), so
+    % the same call with any other variable in place of var returns the
+    % identical geometry with that variable edge-interpolated in the 3rd
+    % column.  That is the ref's own way of sampling every field on the
+    % cut, and far cheaper than a scatteredInterpolant over the whole
+    % block per variable (which dominated run time on real grids).
     ro3 = double(bl.ro); if ndims(ro3) < 3, ro3 = reshape(ro3,sz); end
     [fc,vtx] = isosurface(yy,zz,ro3,xrot,0,ro3);
     if isempty(fc), continue; end
@@ -354,16 +357,14 @@ for bid = bids
     cut.y = [cut.y; vtx(:,1)];
     cut.z = [cut.z; vtx(:,2)];
     cut.ro = [cut.ro; vtx(:,3)];
-    % remaining variables sampled at the same (y,z) positions.  Note: a
-    % single interpolant with a Values swap would be faster, but the
-    % folded 3D->2D point set contains duplicate (y,z) locations which
-    % corrupt the interpolant on Values reassignment, so each variable
-    % gets its own (as the ref does).
     for v = 2:numel(vars)
         fv = double(bl.(vars{v}));
         if ndims(fv) < 3, fv = reshape(fv,sz); end
-        F = scatteredInterpolant(yy(:),zz(:),fv(:),'linear','nearest');
-        cut.(vars{v}) = [cut.(vars{v}); F(vtx(:,1),vtx(:,2))];
+        [~,vtx_v] = isosurface(yy,zz,fv,xrot,0,fv);
+        if ~isequal(size(vtx_v),size(vtx))
+            error('ts3_extract: isosurface geometry changed between variables');
+        end
+        cut.(vars{v}) = [cut.(vars{v}); vtx_v(:,3)];
     end
     if ~isfield(cut,'av')
         cut.av = bl.av; cut.bv = bl.bv;
@@ -425,31 +426,55 @@ function [rf,tf] = periodic_face_theta(cut,pitch)
 % periodic image (same x,r at theta+pitch) is also a boundary vertex lies
 % on the low-theta face - the passage spans exactly one pitch, so no
 % interior or wall vertex has such a partner.  Returns empty when fewer
-% than two matches are found.
+% than two matches are found.  Candidate partners lie in a +-0.1*pitch
+% theta window, so the search walks a theta-sorted sliding window instead
+% of scanning all pairs, which dominated run time on real-grid cuts.
 f = cut.faces;
 e = sort([f(:,[1 2]); f(:,[2 3]); f(:,[3 1])],2);
 [eu,~,ic] = unique(e,'rows');
 be = eu(accumarray(ic,1)==1,:);                 % boundary edges
 vb = unique(be(:));
+nb = numel(vb);
+thlo = nan(nb,1);
+if nb < 2, rf = []; tf = []; return; end
 rb = cut.r(vb); tb = cut.rt(vb)./rb; xb = cut.x(vb);
-thlo = nan(size(vb));
 rrng = max(cut.r)-min(cut.r)+1e-12;
 xrng = max(cut.x)-min(cut.x)+1e-12;
-for i = 1:numel(vb)
-    % partner at theta+pitch with the same (x,r)
-    m = abs(tb-tb(i)-pitch) < 0.1*pitch & ...
-        abs(rb-rb(i)) < 1e-6*rrng & ...
-        abs(xb-xb(i)) < 1e-6*xrng;
-    m(i) = false;
-    if any(m)
-        % pick the partner closest to exactly one pitch offset
-        mm = find(m);
-        [~,im] = min(abs(tb(mm)-tb(i)-pitch));
-        thlo(i) = tb(mm(im))-pitch;
+% window [tb+0.9*pitch, tb+1.1*pitch] per vertex, found by binary search
+% on the distinct sorted thetas (interp1 needs unique sample points)
+[~,ord] = sort(tb);
+tbs = tb(ord);
+[tbsu,fst] = unique(tbs);                       % first occurrence indices
+lst = [fst(2:end)-1; nb];                       % last occurrence indices
+lo_u = interp1(tbsu,1:numel(tbsu),tb+0.9*pitch,'next');      % first >= lo
+hi_u = interp1(tbsu,1:numel(tbsu),tb+1.1*pitch,'previous'); % last <= hi
+win = ~isnan(lo_u) & ~isnan(hi_u);
+lo = nan(nb,1); hi = nan(nb,1);
+lo(win) = fst(lo_u(win));
+hi(win) = lst(hi_u(win));
+% walk the (short) candidate windows, vectorised over all vertices
+dmin = inf(nb,1);
+jbest = zeros(nb,1);
+if any(win)
+    maxw = max(hi(win)-lo(win)) + 1;
+    for k = 0:maxw-1
+        j = lo + k;
+        act = win & j <= hi;
+        jj = ord(j(act));
+        ii = find(act);
+        d = abs(tb(jj)-tb(ii)-pitch);
+        good = d < 0.1*pitch & ...
+            abs(rb(jj)-rb(ii)) < 1e-6*rrng & ...
+            abs(xb(jj)-xb(ii)) < 1e-6*xrng & d < dmin(ii);
+        ii = ii(good);
+        dmin(ii) = d(good);
+        jbest(ii) = jj(good);
     end
 end
-sel = isfinite(thlo);
-if sum(sel) < 2, rf = []; tf = []; return; end
+hit = jbest > 0;
+if sum(hit) < 2, rf = []; tf = []; return; end
+thlo(hit) = tb(jbest(hit)) - pitch;
+sel = hit;
 rf = rb(sel); tf = thlo(sel);
 [rf,ix] = sort(rf);
 tf = tf(ix);
