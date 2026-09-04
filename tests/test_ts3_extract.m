@@ -111,6 +111,40 @@ check(abs(res_sk.L00S.mdot-res_r.L00S.mdot)/res_r.L00S.mdot < 1e-3, ...
 check(abs(res_sk.L00S.To_mm-res_r.L00S.To_mm)/To_exp < 1e-6, ...
     'skew face: mass averaged To insensitive to face skew');
 
+%% single-precision grid
+% Real solver grids store coordinates/flow in single and bv fields as
+% non-double scalars; ts3_extract must cast internally and give the same
+% answers as on the double grid.
+g_sp = dummy_grid(false);
+for i = 1:numel(g_sp)
+    b = g_sp{i};
+    fns = fieldnames(b);
+    for f = 1:numel(fns)
+        a = b.(fns{f});
+        if isfloat(a)
+            b.(fns{f}) = single(a);
+        elseif isstruct(a) && (isfield(a,'cp') || isfield(a,'rpm'))
+            % av/bv scalars (cp, ga, fblade, rpm, ...) as on real grids
+            sfn = fieldnames(a);
+            for s = 1:numel(sfn)
+                if isfloat(a.(sfn{s}))
+                    a.(sfn{s}) = single(a.(sfn{s}));
+                end
+            end
+            b.(fns{f}) = a;
+        end
+    end
+    g_sp{i} = b;
+end
+res_sp = ts3_extract(g_sp);
+for n = 1:3
+    nm = rows{n};
+    check(max(abs(res_sp.(nm).Po-res.(nm).Po))/Po_exp < 1e-5, ...
+        [nm ': single-precision Po profile unchanged']);
+    check(abs(res_sp.(nm).mdot-res.(nm).mdot)/res.(nm).mdot < 1e-5, ...
+        [nm ': single-precision mdot unchanged']);
+end
+
 fprintf('\ntest_ts3_extract: all checks passed\n');
 
 %% helper

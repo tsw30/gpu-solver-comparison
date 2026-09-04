@@ -235,8 +235,8 @@ for bid = 0:numel(g)-1
     for pid = 0:numel(bl.patch)-1
         p = bl.patch{pid+1};
         if p.attribute.kind == 0
-            PAMB = max(p.pstag(:));
-            TAMB = max(p.tstag(:));
+            PAMB = double(max(p.pstag(:)));
+            TAMB = double(max(p.tstag(:)));
             return
         end
     end
@@ -390,7 +390,7 @@ rhub = pchip(xrh(:,1),xrh(:,2),xref(1));
 rcas = pchip(xrc(:,1),xrc(:,2),xref(2));
 rj = rhub + rnd(:)*(rcas-rhub);      % span stations on the cut plane
 xj = xr0(1) + (rj-xr0(2))*tan(cs);   % axial location on the cut line
-pitch = 2*pi/cut.bv.fblade;
+pitch = 2*pi/double(cut.bv.fblade);
 [rf,tf] = periodic_face_theta(cut,pitch);    % low-theta periodic face
 if isempty(rf)
     thf_v = min(cut.rt./cut.r);      % fallback: lowest cut theta
@@ -407,8 +407,9 @@ tl = cut.rt./cut.r - thf_v;
 [Rq,Tq] = ndgrid(rj,(0:nk-1)/(nk-1)*pitch);
 vars = {'ro','rovx','rovr','rorvt','roe'};
 for v = 1:numel(vars)
-    F = scatteredInterpolant(cut.r,tl,cut.(vars{v}),'linear','nearest');
-    plane.(vars{v}) = F(Rq,Tq);
+    % double casts: solver/bv fields may be single precision on real grids
+    F = scatteredInterpolant(double(cut.r),double(tl),double(cut.(vars{v})),'linear','nearest');
+    plane.(vars{v}) = F(double(Rq),double(Tq));
 end
 th = thf + Tq;                       % one blade pitch per row
 plane.r  = Rq;
