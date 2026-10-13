@@ -56,7 +56,7 @@ def extract_radial_profile(
         iso_var = "Streamwise CFR"
         iso_value = -0.025
         calc_streamwise_cfr(zone=zone, store=True)
-    surface = isoSurface(volume, var=iso_var, value=iso_value)
+    surface = isoSurface(volume, var=iso_var, value=iso_value)()
     averaged_surface = average(surface)
     mo_profile = averaged_surface.mixed_out_average(
         dim="pitchwise", nDivs=num_points-1, distribution="cosine")
