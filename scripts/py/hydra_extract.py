@@ -124,7 +124,7 @@ def rig_average(
 
 def process_probe(
         inpt_file: str, coords_dict: dict,
-        probe_name: str) -> tuple[dict, dict, dict]:
+        probe_name: str) -> tuple[dict, dict, dict, dict]:
     """Process a single probe: extract radial profile, sample rig coordinates,
     and calculate area-weighted averages."""
 
@@ -135,7 +135,13 @@ def process_probe(
     weights = area_weights(np.array(coords_dict[probe_name]))
     averaged_data, mass_averaged_data = rig_average(sampled_data, weights)
 
-    return averaged_data, mass_averaged_data, sampled_data
+    # Extract full CFD MMMO values for AVG_VARIABLES
+    cfd_averaged_data = {}
+    cfd_avg = average(profile)
+    for var in AVG_VARIABLES:
+        cfd_averaged_data[var] = cfd_avg.mass_average(var, dim="full")
+
+    return averaged_data, mass_averaged_data, sampled_data, cfd_averaged_data
 
 
 def parse_args():
@@ -174,11 +180,16 @@ def main():
         raise ValueError("Valid probe name must be specified.")
 
     for probe_name in probe_names:
-        averaged_data, mass_averaged_data, sampled_data = process_probe(
-            args.inpt_file, coords_dict, probe_name)
+        (
+            averaged_data,
+            mass_averaged_data,
+            sampled_data,
+            cfd_averaged_data,
+        ) = process_probe(args.inpt_file, coords_dict, probe_name)
         results[probe_name] = {
             "averaged_data": averaged_data,
-            "mass_averaged_data": mass_averaged_data
+            "mass_averaged_data": mass_averaged_data,
+            "cfd_MMMO_data": cfd_averaged_data
         }
         for k, v in sampled_data.items():
             if isinstance(v, np.ndarray):
