@@ -139,7 +139,7 @@ def process_probe(
     cfd_averaged_data = {}
     cfd_avg = average(profile)
     for var in AVG_VARIABLES:
-        cfd_averaged_data[var] = cfd_avg.mass_average(var, dim="full")
+        cfd_averaged_data[var] = cfd_avg.mass_average(var, dim="full")[0]
 
     return averaged_data, mass_averaged_data, sampled_data, cfd_averaged_data
 
