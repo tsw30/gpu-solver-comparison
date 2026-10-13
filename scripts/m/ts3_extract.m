@@ -45,7 +45,7 @@ if ~exist(coords_file,'file')
 end
 coords = jsondecode(fileread(coords_file));
 
-[B,bid_os] = get_rows(g);
+[B,bid_os] = ts3_get_rows(g);
 if numel(B) < 3
     error('ts3_extract: expected at least 3 blade rows, found %d', numel(B));
 end
@@ -58,7 +58,7 @@ for n = 1:3
     nm  = rows{n};
     bl  = g{bid_os(n)+1};              % o-mesh block of row n
     crd = coords.(nm);
-    [xrh, xrc] = hub_casing(g,B{n});   % hub and casing streamwise lines
+    [xrh, xrc] = ts3_hub_casing(g,B{n});   % hub and casing streamwise lines
     ang = 180/pi*atan2(crd(end,2)-crd(1,2), crd(end,1)-crd(1,1));
 
     cut = cut_plane(g,find_cut_blocks(g,crd,ang,B,n),bid_os(n),crd(1,:),ang);
@@ -84,101 +84,6 @@ NRT = rpm_corr/(7224.315/1.05);
 
 results = evaluate_averages(results,PAMB,TAMB);
 results.NRT = NRT;
-end
-
-%% Row identification
-
-function [B,bid_os] = get_rows(g)
-% Blade row block groups from periodic (kind 5 or 16) patch connectivity,
-% following the same logic as ref ts_get_row_bids but condensed.
-%
-% An "o-mesh block" (bid_os) is a blade-passage block with a self-periodic
-% wrap-around i-face (kind 5, nxbid==bid, ist==ni-1, ien==ni) AND a wall
-% at k=0 (kwall==1).  Blocks without a full-j k=0 face (e.g. inlet plena)
-% have kwall=0 and are rejected.
-%
-% Row groups are formed by flood-filling through periodic connections,
-% then sorted by o-mesh leading-edge x.
-nb = numel(g);
-% --- kwall and periodic connectivity ---
-kwall = ones(nb,1);
-periodic = false(nb);
-for bid = 0:nb-1
-    bl = g{bid+1};
-    if ~isfield(bl,'patch'), continue; end
-    for pid = 0:numel(bl.patch)-1
-        p = bl.patch{pid+1}.attribute;
-        kst = p.kst; ken = p.ken;
-        jst = p.jst; jen = p.jen;
-        nj  = bl.attribute.nj;
-        % kwall: a single-k-plane (kst==ken-1) full-j-span face at
-        % kst==0 that is not a wall or sliding-plane makes kwall=0
-        if kst==ken-1 && nj==jen-jst && p.kind~=8 && p.kind~=14
-            if kst == 0
-                kwall(bid+1) = 0;
-            end
-        end
-        % periodic connectivity via kind 5 or 16
-        if p.kind==5 || p.kind==16
-            periodic(bid+1,p.nxbid+1) = true;
-        end
-    end
-end
-periodic = periodic | periodic.';
-% --- o-mesh detection (kind 5, self, i-wrap, kwall==1) ---
-os = false(nb,1);
-for bid = 0:nb-1
-    bl = g{bid+1};
-    if ~isfield(bl,'patch') || kwall(bid+1)==0, continue; end
-    for pid = 0:numel(bl.patch)-1
-        p = bl.patch{pid+1}.attribute;
-        if p.kind==5 && p.nxbid==bid && ...
-                p.ist==bl.attribute.ni-1 && p.ien==bl.attribute.ni
-            os(bid+1) = true;
-            break
-        end
-    end
-end
-bid_os = find(os)-1;
-if isempty(bid_os)
-    B = {}; return
-end
-% --- flood-fill row groups ---
-B = {};
-used = false(nb,1);
-for b0 = find(any(periodic,2))'                     % start from blocks with connections
-    if used(b0), continue; end
-    grp = b0; used(b0) = true;
-    i = 1;
-    while i <= numel(grp)
-        nbrs = find(periodic(grp(i),:));
-        nbrs = nbrs(~used(nbrs));
-        used(nbrs) = true;
-        grp = [grp; nbrs(:)]; %#ok<AGROW>
-        i = i+1;
-    end
-    B{end+1} = grp-1; %#ok<AGROW>                  % 0-based
-end
-% --- assign each o-mesh block to its row, error if not one-per-row ---
-nrows = numel(B);
-bid_os_u = bid_os(:);
-bid_os_in_row = cell(nrows,1);
-for n = 1:nrows
-    mask = ismember(bid_os_u,B{n});
-    bid_os_in_row{n} = bid_os_u(mask);
-end
-os_per_row = cellfun(@numel,bid_os_in_row);
-if any(os_per_row==0)
-    error('ts3_extract: row has no o-mesh block');
-end
-bid_os = cellfun(@(x) x(1),bid_os_in_row);         % one per row
-% --- order rows axially by o-mesh leading edge ---
-xos = zeros(nrows,1);
-for n = 1:nrows
-    xos(n) = min(g{bid_os(n)+1}.x(:));
-end
-[~,ix] = sort(xos);
-B = B(ix); bid_os = bid_os(ix);
 end
 
 function bids = find_cut_blocks(g,crd,ang,B,row)
@@ -242,50 +147,6 @@ for bid = 0:numel(g)-1
     end
 end
 error('ts3_extract: no inlet patch found');
-end
-
-%% Geometry helpers
-
-function [xrh,xrc] = hub_casing(g,B_row)
-% Hub and casing (x,r) polylines of a row from the kind-5 periodic patch
-% surfaces of its blocks (ts_get_xr logic): j=1 of a patch surface is hub,
-% j=nj is casing.  The o-mesh i-wrap self-periodic patch is skipped (it is
-% a passage face, not an endwall).  Points are sorted by x and uniqued so
-% pchip interpolation along each polyline is well posed.  Only the block
-% coordinate arrays are read - no flow fields are copied.
-xhub = []; rhub = []; xcas = []; rcas = [];
-for bid = B_row(:)'
-    bl = g{bid+1};
-    if ~isfield(bl,'patch'), continue; end
-    for pid = 0:numel(bl.patch)-1
-        p = bl.patch{pid+1}.attribute;
-        if p.kind ~= 5, continue; end
-        if p.nxbid==bid && p.ist==bl.attribute.ni-1 && p.ien==bl.attribute.ni
-            continue                     % o-mesh i-wrap self-periodic
-        end
-        % patch surface (x,r) window, singleton dimensions squeezed
-        ist = p.ist+1; ien = p.ien;
-        jst = p.jst+1; jen = p.jen;
-        kst = p.kst+1; ken = p.ken;
-        xw = double(bl.x(ist:ien,jst:jen,kst:ken));
-        rw = double(bl.r(ist:ien,jst:jen,kst:ken));
-        sw = size(xw); sw = sw(sw>1);
-        xw = reshape(xw,sw); rw = reshape(rw,sw);
-        if p.ist+1 == p.ien                % constant-i patch -> (j,k) surface
-            xhub = [xhub; xw(1,:)'];  rhub = [rhub; rw(1,:)'];   % j=1 hub
-            xcas = [xcas; xw(end,:)']; rcas = [rcas; rw(end,:)']; % j=nj casing
-        else                               % constant-k patch -> (i,j) surface
-            xhub = [xhub; xw(:,1)];   rhub = [rhub; rw(:,1)];    % j=1 hub
-            xcas = [xcas; xw(:,end)];  rcas = [rcas; rw(:,end)];  % j=nj casing
-        end
-    end
-end
-[xhub,is] = sort(xhub); rhub = rhub(is);
-[xhub,iu] = unique(xhub); rhub = rhub(iu);
-[xcas,is] = sort(xcas); rcas = rcas(is);
-[xcas,iu] = unique(xcas); rcas = rcas(iu);
-xrh = [xhub(:), rhub(:)];
-xrc = [xcas(:), rcas(:)];
 end
 
 function rnd = span_stations(bl)

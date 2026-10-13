@@ -1,0 +1,39 @@
+#!/bin/bash
+#SBATCH -J gpujob
+#SBATCH -A ACCOUNT
+#SBATCH --nodes=NUMBERNODES
+#SBATCH --ntasks=NUMBERTASKS
+#SBATCH --gres=gpu:PROCESSES_PER_NODE
+#SBATCH --time=WALLTIME
+#SBATCH --mail-type=END
+#SBATCH --requeue
+#SBATCH -p ampere
+
+. /etc/profile.d/modules.sh
+module purge
+source /usr/local/software/turbostream/ts3610_a100/bashrc_module_ts3610_a100
+
+application="APP"
+workdir="WORKDIRECTORY"
+ppn=PROCESSES_PER_NODE
+export OMP_NUM_THREADS=1
+
+mpi_tasks_per_node=$[$ppn/$OMP_NUM_THREADS]
+np=$[${SLURM_JOB_NUM_NODES}*${mpi_tasks_per_node}]
+options="INPUTFILENAME OUTPUTFILENAME PROCESSES_PER_NODE"
+
+CMD="mpirun -npernode $mpi_tasks_per_node -np $np $application $options"
+
+cd $workdir
+echo "Job $SLURM_JOB_ID on $(hostname) at $(date), dir: $(pwd)"
+
+if [ "$SLURM_JOB_NODELIST" ]; then
+    export NODEFILE=`generate_pbs_nodefile`
+    cat $NODEFILE | uniq > machine.file.$SLURM_JOB_ID
+    echo "Nodes: $(cat machine.file.$SLURM_JOB_ID | sed -e 's/\..*$//g')"
+fi
+
+echo "$SLURM_NTASKS tasks, $SLURM_JOB_NUM_NODES nodes, $ppn ppn, $OMP_NUM_THREADS OMP threads"
+echo "Running: $CMD"
+
+eval $CMD > LOGFILENAME
