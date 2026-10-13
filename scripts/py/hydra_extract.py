@@ -167,6 +167,9 @@ def main():
             "averaged_data": averaged_data,
             "mass_averaged_data": mass_averaged_data
         }
+        for k, v in sampled_data.items():
+            if isinstance(v, np.ndarray):
+                sampled_data[k] = v.tolist()
         sampled[probe_name] = sampled_data
 
     # Save results to JSON file
