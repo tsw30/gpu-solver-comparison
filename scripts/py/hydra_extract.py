@@ -111,7 +111,7 @@ def rig_average(
 
 def process_probe(
         inpt_file: str, coords_dict: dict,
-        probe_name: str) -> tuple[dict, dict]:
+        probe_name: str) -> tuple[dict, dict, dict]:
     """Process a single probe: extract radial profile, sample rig coordinates,
     and calculate area-weighted averages."""
 
@@ -122,7 +122,7 @@ def process_probe(
     weights = area_weights(np.array(coords_dict[probe_name]))
     averaged_data, mass_averaged_data = rig_average(sampled_data, weights)
 
-    return averaged_data, mass_averaged_data
+    return averaged_data, mass_averaged_data, sampled_data
 
 
 def parse_args():
@@ -154,25 +154,31 @@ def main():
     coords_dict = load_measurement_coords(args.coords_file)
 
     results = {}
+    sampled = {}
     if args.probe_name:
         probe_names = [args.probe_name]
     else:
         raise ValueError("Valid probe name must be specified.")
 
     for probe_name in probe_names:
-        averaged_data, mass_averaged_data = process_probe(
+        averaged_data, mass_averaged_data, sampled_data = process_probe(
             args.inpt_file, coords_dict, probe_name)
         results[probe_name] = {
             "averaged_data": averaged_data,
             "mass_averaged_data": mass_averaged_data
         }
+        sampled[probe_name] = sampled_data
 
     # Save results to JSON file
-    output_file = os.path.splitext(args.inpt_file)[0] + "_extracted.json"
-    with open(output_file, "w") as f:
+    output_base = os.path.splitext(args.output_file)
+    avgd_file = output_base[0] + ".json"
+    radial_file = output_base[0] + "_radial.json"
+    with open(avgd_file, "w") as f:
         json.dump(results, f, indent=4)
+    with open(radial_file, "w") as f:
+        json.dump(sampled, f, indent=4)
 
-    print(f"Results saved to {output_file}")
+    print(f"Results saved to {output_base[0]}")
 
 
 if __name__ == "__main__":
