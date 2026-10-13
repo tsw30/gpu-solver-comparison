@@ -15,8 +15,9 @@ def main():
     """Use subprocesses for each domain processed."""
     for probe in PROBES:
         output_file = os.path.join(OUT_DIR, probe + '_data.json')
-        command = 'python ' + SCRIPT_PATH + ' --probe_name ' + probe + \
-                  ' --output_file ' + output_file
+        inpt_file = os.path.join(RUN_DIR,"coupler","input.jm76")
+        command = 'python ' + SCRIPT_PATH + " " + inpt_file + ' --probe_name '\
+                  + probe + ' --output_file ' + output_file
         subprocess.run(command, shell=True, check=True)
 
 
