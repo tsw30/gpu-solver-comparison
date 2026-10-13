@@ -170,6 +170,9 @@ def main():
         sampled[probe_name] = sampled_data
 
     # Save results to JSON file
+    output_dir = os.path.dirname(args.output_file)
+    if not os.path.isdir(output_dir):
+        os.mkdir(output_dir)
     output_base = os.path.splitext(args.output_file)
     avgd_file = output_base[0] + ".json"
     radial_file = output_base[0] + "_radial.json"
