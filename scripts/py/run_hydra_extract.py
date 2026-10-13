@@ -17,7 +17,7 @@ def main():
         output_file = os.path.join(OUT_DIR, probe + '_data.json')
         command = 'python ' + SCRIPT_PATH + ' --probe_name ' + probe + \
                   ' --output_file ' + output_file
-        subprocess.call(command)
+        subprocess.run(command, shell=True, check=True)
 
 
 if __name__ == "__main__":
