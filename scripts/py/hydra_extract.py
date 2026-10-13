@@ -89,6 +89,15 @@ def rig_sampling(
     for var in SAMPLED_VARIABLES:
         var_profile = profile.get_cell_centred_values(var)
         sampled_data[var] = np.interp(span_rig, span_profile, var_profile)
+        # Extrapolate endwall points from real measurments
+        sampled_data[var][0] = sampled_data[var][1] + \
+            (r_rig[0] - r_rig[1]) * (sampled_data[var][2] -
+                                     sampled_data[var][1]) / \
+            (r_rig[2] - r_rig[1])
+        sampled_data[var][-1] = sampled_data[var][-2] + \
+            (r_rig[-1] - r_rig[-2]) * (sampled_data[var][-2] -
+                                       sampled_data[var][-3]) / \
+            (r_rig[-2] - r_rig[-3])
 
     return sampled_data
 
