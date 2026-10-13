@@ -142,7 +142,7 @@ def process_probe(
         v = cfd_avg.mass_average(var, dim="full")
         print(type(v[0]), type(v[1]))
         cfd_averaged_data[var] = v[0]
-        cfd_averaged_data["mass_flow"] = np.absolute(v[1])
+        cfd_averaged_data["mass_flow"] = np.absolute(np.sum(v[1]))
 
     return averaged_data, mass_averaged_data, sampled_data, cfd_averaged_data
 
