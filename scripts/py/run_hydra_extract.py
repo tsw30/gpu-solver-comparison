@@ -10,12 +10,13 @@ OUT_DIR = RUN_DIR + "/avgd"
 SCRIPT_PATH = "/home/tsw30/python/gpu-solver-comparison/scripts/py/" \
               "hydra_extract.py"
 
+
 def main():
     """Use subprocesses for each domain processed."""
     for probe in PROBES:
         output_file = os.path.join(OUT_DIR, probe + '_data.json')
-        command = ['python ' + SCRIPT_PATH + ' --probe_name ' + probe +
-                   ' --output_file ' + output_file]
+        command = 'python ' + SCRIPT_PATH + ' --probe_name ' + probe + \
+                  ' --output_file ' + output_file
         subprocess.call(command)
 
 
