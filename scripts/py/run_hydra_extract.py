@@ -6,7 +6,7 @@ import subprocess
 # RUN_DIR = "/rds/project/rds-Z81G6YisvY4/tsw30/hydra/LSF5/CFD/Airmeter/" \
 #           "urans_ar60p5_avg"
 RUN_DIR = "/rds/project/rds-Z81G6YisvY4/tsw30/hydra/LSF5/CFD/Airmeter/" \
-          "gom85_mp_ar58p5"
+          "gom106_mp_ar64"
 PROBES = ['L00S', 'BPIN', 'ESIN']
 OUT_DIR = RUN_DIR + "/avgd"
 SCRIPT_PATH = "/home/tsw30/python/gpu-solver-comparison/scripts/py/" \
